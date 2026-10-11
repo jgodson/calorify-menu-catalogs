@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: "{{APP_NAME}}-data"
+  namespace: "{{NAMESPACE}}"
+  labels:
+    app.kubernetes.io/part-of: "{{APP_NAME}}"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  # Change to a storage class your cluster has (omit to use the default).
+  storageClassName: ceph-rbd
+  resources:
+    requests:
+      storage: 1Gi

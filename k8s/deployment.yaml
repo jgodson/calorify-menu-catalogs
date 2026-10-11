@@ -1,0 +1,134 @@
+# kube-manager "manifests" deployment. Placeholders ({{...}}) are filled in by kube-manager;
+# other hosts can replace them by hand. UPLOAD_TOKEN (and optional READ_TOKEN) come from the
+# deploy target's secrets, never from this repository.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{APP_NAME}}"
+  namespace: "{{NAMESPACE}}"
+  labels:
+    app: "{{APP_NAME}}"
+    app.kubernetes.io/part-of: "{{APP_NAME}}"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate # the data volume is ReadWriteOnce
+  selector:
+    matchLabels:
+      app: "{{APP_NAME}}"
+  template:
+    metadata:
+      labels:
+        app: "{{APP_NAME}}"
+        app.kubernetes.io/part-of: "{{APP_NAME}}"
+    spec:
+      automountServiceAccountToken: false
+      imagePullSecrets:
+        - name: "{{REGISTRY_SECRET_NAME}}"
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: server
+          image: "{{IMAGE}}"
+          imagePullPolicy: Always
+          env:
+            - name: DATA_DIR
+              value: /data
+            - name: PORT
+              value: "8080"
+            - name: REFRESH_INTERVAL_HOURS
+              value: "168"
+            - name: PUBLIC_BASE_URL
+              value: "https://{{HOSTNAME}}"
+            - name: UPLOAD_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: "{{SECRET_NAME}}"
+                  key: UPLOAD_TOKEN
+                  optional: true
+            - name: READ_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: "{{SECRET_NAME}}"
+                  key: READ_TOKEN
+                  optional: true
+          ports:
+            - name: http
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 3
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 20m
+              memory: 64Mi
+            limits:
+              cpu: 500m
+              memory: 512Mi
+          volumeMounts:
+            - name: data
+              mountPath: /data
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: "{{APP_NAME}}-data"
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{APP_NAME}}"
+  namespace: "{{NAMESPACE}}"
+  labels:
+    app.kubernetes.io/part-of: "{{APP_NAME}}"
+spec:
+  selector:
+    app: "{{APP_NAME}}"
+  ports:
+    - name: http
+      port: 80
+      targetPort: http
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: "{{APP_NAME}}-ingress"
+  namespace: "{{NAMESPACE}}"
+  labels:
+    app.kubernetes.io/part-of: "{{APP_NAME}}"
+spec:
+  ingressClassName: traefik
+  rules:
+    - host: "{{HOSTNAME}}"
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: "{{APP_NAME}}"
+                port:
+                  name: http

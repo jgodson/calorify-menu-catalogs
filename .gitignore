@@ -1,0 +1,10 @@
+# Menu data is for personal use only and never belongs in this repository.
+data/
+out/
+input/
+*.har
+*.catalog.json
+
+__pycache__/
+*.pyc
+.DS_Store
