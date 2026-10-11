@@ -217,7 +217,8 @@ def make_handler(store: Store, config: Config):
                   <p class="how">{html.escape(source.how_to)}</p>
                   <div class="actions">{action}<span class="result" id="result-{source.key}"></span></div>
                 </section>""")
-            uploads = ('<label>Upload token <input type="password" id="token" autocomplete="off"></label>'
+            uploads = ('<p class="token"><label>Upload token <input type="password" id="token" autocomplete="off"></label>'
+                       ' <label><input type="checkbox" id="remember" checked> Remember in this browser</label></p>'
                        if config.upload_token else '<p class="error">Uploads are disabled until UPLOAD_TOKEN is set.</p>')
             return PAGE.replace("{{UPLOADS}}", uploads).replace("{{SECTIONS}}", "".join(rows))
 
@@ -241,6 +242,7 @@ PAGE = """<!doctype html>
   .actions { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
   button { font: inherit; font-weight: 600; padding: 6px 14px; border: 2px solid var(--ink); border-radius: 999px; background: #9fe1cb; color: #04342c; cursor: pointer; }
   input[type=password] { font: inherit; padding: 4px 8px; margin-left: 6px; }
+  .token { display: flex; gap: 6px 16px; align-items: center; flex-wrap: wrap; }
   .notes { margin: 4px 0; padding-left: 20px; font-size: 14px; opacity: .8; }
 </style></head>
 <body><main>
@@ -250,7 +252,19 @@ PAGE = """<!doctype html>
 {{SECTIONS}}
 </main>
 <script>
-  const token = () => (document.getElementById("token") || {}).value || "";
+  // The upload token can be kept in this browser's localStorage so uploads don't need it pasted each time.
+  const KEY = "menu-catalogs-upload-token";
+  const tokenField = document.getElementById("token");
+  const remember = document.getElementById("remember");
+  const storage = { get() { try { return localStorage.getItem(KEY) || ""; } catch { return ""; } },
+                    set(value) { try { value ? localStorage.setItem(KEY, value) : localStorage.removeItem(KEY); } catch {} } };
+  if (tokenField) {
+    tokenField.value = storage.get();
+    const save = () => storage.set(remember.checked ? tokenField.value : "");
+    tokenField.addEventListener("input", save);
+    remember.addEventListener("change", save);
+  }
+  const token = () => (tokenField || {}).value || "";
   async function send(source, action, body) {
     const result = document.getElementById("result-" + source);
     result.textContent = "Working…";
@@ -258,7 +272,10 @@ PAGE = """<!doctype html>
       const response = await fetch(`/api/sources/${source}/${action}`, {
         method: "POST", body, headers: { "Authorization": "Bearer " + token() } });
       const payload = await response.json();
-      if (!response.ok) { result.textContent = payload.error || response.statusText; result.className = "result error"; return; }
+      if (!response.ok) {
+        if (response.status === 401) storage.set("");
+        result.textContent = payload.error || response.statusText; result.className = "result error"; return;
+      }
       result.textContent = `Done: ${payload.foodCount} foods`; result.className = "result";
       setTimeout(() => location.reload(), 1200);
     } catch (error) { result.textContent = String(error); result.className = "result error"; }
