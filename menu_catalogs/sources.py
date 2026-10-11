@@ -6,7 +6,7 @@ import json
 from dataclasses import dataclass
 from typing import Callable
 
-from . import dairy_queen, mcdonalds, tim_hortons
+from . import dairy_queen, mcdonalds, subway, tim_hortons
 from .common import CatalogError
 
 
@@ -49,6 +49,16 @@ def _dairy_queen_convert(stored: bytes) -> tuple[dict, list[str]]:
     return catalog, [f"skipped {line}" for line in skipped]
 
 
+def _subway_prepare(raw: bytes) -> bytes:
+    text = subway.pdf_to_text(raw)
+    subway.build(text)  # raises if the PDF has no nutrition rows
+    return text.encode("utf-8")
+
+
+def _subway_convert(stored: bytes) -> tuple[dict, list[str]]:
+    return subway.build(stored.decode("utf-8"))
+
+
 SOURCES: dict[str, Source] = {
     "tim-hortons": Source(
         key="tim-hortons",
@@ -80,5 +90,16 @@ SOURCES: dict[str, Source] = {
         accept=".html,.htm,text/html",
         prepare=_dairy_queen_prepare,
         convert=_dairy_queen_convert,
+    ),
+    "subway": Source(
+        key="subway",
+        catalog_id=subway.CATALOG_ID,
+        name=subway.NAME,
+        kind="upload",
+        how_to=("Download the Canada nutrition information PDF from Subway's Canadian website (Menu → Nutrition) "
+                "and upload it here. Only the text of its tables is kept."),
+        accept=".pdf,application/pdf",
+        prepare=_subway_prepare,
+        convert=_subway_convert,
     ),
 }

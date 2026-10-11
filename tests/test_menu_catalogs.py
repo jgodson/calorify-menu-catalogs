@@ -13,7 +13,7 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
 
-from menu_catalogs import dairy_queen, mcdonalds, tim_hortons
+from menu_catalogs import dairy_queen, mcdonalds, subway, tim_hortons
 from menu_catalogs.common import CatalogError, validate
 from menu_catalogs.sources import SOURCES
 from menu_catalogs.store import Store
@@ -26,6 +26,28 @@ DQ_PAGE = """<html><head><link rel="canonical" href="https://example.test/dq"/><
 <h3 class="table-group-sub-heading">Signature StackburgersTM (precooked weight)</h3>
 <table><tr><th>Bacon Burger - Double</th><td>770</td><td>46</td><td>16</td><td>1</td><td>130</td><td>1,630</td><td>45</td><td>2</td><td>13</td><td>46</td><td>M\\S</td></tr></table>
 </body></html>""".encode()
+
+SUBWAY_TEXT = """                                   CANADA NUTRITION INFORMATION
+                                                      October 2026
+
+                    Serving Size (g)   Total Fat (g)   Sodium (mg)
+SANDWICHES
+6" Classics Subs               Double values for footlong nutrition information
+
+Pizza Sub                          223                440         20                8                  0           40          1490            47             3                  8          18             6            50
+Turkey Breast                      233                430         19                5                  0           50          1150            46             3                  6          20             6            20
+WRAPS
+Classics Wraps                 Values include wrap
+Turkey Breast                     265                 520          24               5                  0           50          1240            59              3                 5          20            10            20
+BREADS & CONDIMENTS
+Breads                                             Double values for footlong
+                                                   Values are for amounts on 6-inch sandwich
+Gluten Free Bread (as packaged)1**                     120      330       12         1        0        0     890      55        7        1        3        2        8
+Seasonings (amount on 6-inch sub, salad or wrap)
+Salt                                                     0        0        0       0        0        0      160        0        0       0        0        0        0
+Broken Row                                              14      20         0       0        0        0
+1
+"""
 
 
 def mcd_item(item_id: int, name: str, internal: str, category: str, calories: str, grams: str = "250") -> dict:
@@ -88,6 +110,30 @@ class ConverterTests(unittest.TestCase):
             mcdonalds.extract_item_lists(b"not json")
         with self.assertRaises(CatalogError):
             SOURCES["mcdonalds"].prepare(json.dumps({"log": {"entries": []}}).encode())
+
+    def test_subway_names_forms_adds_footlongs_and_skips_short_rows(self):
+        catalog, notes = subway.build(SUBWAY_TEXT)
+        foods = {food["name"]: food for food in catalog["foods"]}
+        self.assertEqual(set(foods), {
+            "Pizza Sub (6-inch)", "Pizza Sub (Footlong)", "Turkey Breast (6-inch)", "Turkey Breast (Footlong)",
+            "Turkey Breast (Wrap)", "Gluten Free Bread (as packaged)", "Salt"})
+        footlong = foods["Turkey Breast (Footlong)"]
+        self.assertEqual(footlong["serving"], {"description": "1 footlong (466 g)", "grams": 466})
+        self.assertEqual((footlong["calories"], footlong["nutrients"]["sodium"]), (860, 2300))
+        self.assertNotIn("calcium", footlong["nutrients"])
+        self.assertEqual(foods["Turkey Breast (Wrap)"]["category"], "Classics Wraps")
+        self.assertEqual(foods["Gluten Free Bread (as packaged)"]["category"], "Breads")
+        self.assertEqual(foods["Salt"]["serving"], {"description": "1 serving"})
+        self.assertEqual(catalog["catalog"]["version"], "October 2026")
+        self.assertEqual(len(notes), 1)
+        self.assertIn("Broken Row", notes[0])
+        self.assertEqual(validate(catalog), [])
+
+    def test_subway_rejects_files_that_are_not_pdfs(self):
+        with self.assertRaises(CatalogError):
+            SOURCES["subway"].prepare(b"<html></html>")
+        with self.assertRaises(CatalogError):
+            subway.build("nothing here")
 
     def test_tim_hortons_filters_packs_and_reusable_cups_and_adds_coffee_orders(self):
         def option(name, choices):

@@ -3,6 +3,7 @@
     python -m menu_catalogs build tim-hortons
     python -m menu_catalogs build mcdonalds --input mcdonalds.har
     python -m menu_catalogs build dairy-queen --input "Food & Treats Nutrition.html"
+    python -m menu_catalogs build subway --input CAN_Nutrition_ENG.pdf
     python -m menu_catalogs serve
 """
 

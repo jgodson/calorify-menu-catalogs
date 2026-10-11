@@ -5,6 +5,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     DATA_DIR=/data \
     PORT=8080
 
+# pdftotext reads uploaded nutrition PDFs (Subway)
+RUN apk add --no-cache poppler-utils
+
 WORKDIR /app
 COPY menu_catalogs ./menu_catalogs
 

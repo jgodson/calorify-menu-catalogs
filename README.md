@@ -13,12 +13,13 @@ It serves each catalogue at a stable URL that Calorify subscribes to (**Settings
 | Tim Hortons (Canada) | Automatically, weekly by default, from the public data timhortons.ca loads its menu from (about 30 requests per refresh, 0.5 s apart). Includes every size, French names, and Regular / Double Double / Double Cream coffee orders. |
 | McDonald's (Canada) | Upload a HAR captured from the nutrition calculator (steps below). Only the nutrition responses are kept; cookies and the rest of the HAR are discarded. |
 | Dairy Queen (Canada) | Upload the nutrition page saved from your browser (steps below). |
+| Subway (Canada) | Upload Subway's Canada nutrition information PDF (steps below). Each 6-inch sub also gets a footlong with doubled values, as the PDF instructs. Calcium and iron are only published as % DV, so they're left out. |
 
-McDonald's and Dairy Queen block automated requests, and this project never tries to get past bot protection, so those two are refreshed by hand when their menus change.
+McDonald's and Dairy Queen block automated requests, and this project never tries to get past bot protection, so those two (and Subway's PDF) are refreshed by hand when their menus change.
 
 ## Running it
 
-Requires Python 3.11+ and nothing else.
+Requires Python 3.11+. Reading Subway's PDF also needs `pdftotext` from poppler (`brew install poppler`, `apk add poppler-utils`, or `apt install poppler-utils`); the container image includes it.
 
 ```sh
 UPLOAD_TOKEN=$(openssl rand -hex 32) python -m menu_catalogs serve
@@ -52,7 +53,7 @@ The image runs as a non-root user and works with a read-only root filesystem (mo
 
 `k8s/` contains a Deployment, Service, Ingress, and PersistentVolumeClaim with `{{PLACEHOLDER}}` values in the style used by kube-manager "manifests" applications (`APP_NAME`, `NAMESPACE`, `IMAGE`, `HOSTNAME`, `SECRET_NAME`, `REGISTRY_SECRET_NAME`). Replace them by hand for other tooling, set the storage class and ingress class for your cluster, and provide `UPLOAD_TOKEN` (and optionally `READ_TOKEN`) through a Secret.
 
-## Updating McDonald's and Dairy Queen
+## Updating McDonald's, Dairy Queen, and Subway
 
 Menus change a few times a year. Item ids stay the same between updates, so meals already logged in Calorify stay linked, and logged meals always keep the nutrition they were logged with.
 
@@ -73,6 +74,11 @@ Drinks appear once at the calculator's default size with their volume, so log ot
 2. Use **File → Save Page As** (HTML).
 3. On the server's status page, enter your upload token and choose the saved page under Dairy Queen. Rows DQ publishes with missing values are skipped and listed (about 324 foods in October 2026).
 
+### Subway
+
+1. On [Subway Canada](https://www.subway.com/en-CA), open **Menu → Nutrition** and download the Canada nutrition information PDF.
+2. On the server's status page, enter your upload token and choose the PDF under Subway. Only the text of its tables is stored (about 190 foods in October 2026, including footlongs). Rows that don't have every column are skipped and listed.
+
 You can also upload from a terminal:
 
 ```sh
@@ -88,6 +94,7 @@ Uploaded inputs are stored so that converter improvements are applied automatica
 python -m menu_catalogs build tim-hortons
 python -m menu_catalogs build mcdonalds --input mcdonalds.har
 python -m menu_catalogs build dairy-queen --input "Food & Treats Nutrition.html"
+python -m menu_catalogs build subway --input CAN_Nutrition_ENG.pdf
 ```
 
 Files are written to `out/` (gitignored) and can be imported in Calorify with **Settings → Food Catalogues → Import file**.
